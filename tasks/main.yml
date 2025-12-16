@@ -1,0 +1,33 @@
+---
+- name: "01 | Validate"
+  ansible.builtin.import_tasks: 01-validate.yml
+  tags: [validate]
+
+- name: "02 | Install (safe: no LE calls)"
+  ansible.builtin.import_tasks: 02-install.yml
+  tags: [install]
+
+- name: "03 | DNS preflight (safe: no LE calls)"
+  ansible.builtin.import_tasks: 03-dns_preflight.yml
+  when:
+    - certbot_certs | length > 0
+    - certbot_certs[0].method | default('dns') == 'dns'
+    - (certbot_certs[0].dns_provider | default('google')) == 'google'
+    - (certbot_certs[0].dns_auth_method | default(certbot_dns.google.auth_method)) == 'gcloud'
+  tags: [dns_preflight]
+
+- name: "03b | HTTP preflight (safe: no LE calls)"
+  ansible.builtin.import_tasks: 03-http_preflight.yml
+  tags: [http_preflight]
+
+- name: "04 | Hooks (safe: no LE calls)"
+  ansible.builtin.import_tasks: 04-hooks.yml
+  tags: [hooks]
+
+- name: "05 | Issue (LE calls) - only staging/production"
+  ansible.builtin.import_tasks: 05-issue.yml
+  when:
+    - certbot_mode in ['staging', 'production']
+    - certbot_certs | length > 0
+    - certbot_issue_enabled | bool
+  tags: [issue]

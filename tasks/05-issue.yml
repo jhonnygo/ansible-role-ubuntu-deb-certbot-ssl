@@ -1,0 +1,8 @@
+---
+- name: "05.0 | Iterate certbot_certs"
+  ansible.builtin.include_tasks: issue_one.yml
+  loop: "{{ certbot_certs | default([]) }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.name | default('unnamed-cert') }}"
+  when: (certbot_certs | default([]) | length) > 0

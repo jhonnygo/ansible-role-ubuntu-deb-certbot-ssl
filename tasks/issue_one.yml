@@ -1,0 +1,173 @@
+---
+# --------------------------------
+# Init facts
+# --------------------------------
+- name: "05.1 | Init _auth_args (default empty)"
+  ansible.builtin.set_fact:
+    _auth_args: ""
+
+# --------------------------------
+# Issue certificate (DNS-01 via google gcloud)
+# --------------------------------
+- name: "05.2 | Determine cert_name"
+  ansible.builtin.set_fact:
+    _cert_name: "{{ item.cert_name | default(item.name) }}"
+
+- name: "05.3 | Preflight - wildcard requires DNS-01"
+  ansible.builtin.assert:
+    that:
+      - not (item.domains | select('match','^\\*\\.') | list | length > 0) or (item.method == "dns")
+    fail_msg: "Certificate {{ item.name }} includes wildcard domain(s) so method must be 'dns'."
+
+- name: "05.4 | Check if certificate already exists"
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ _cert_name }}/fullchain.pem"
+  register: _cert_stat
+
+- name: "05.5 | Decide if issuance is needed"
+  ansible.builtin.set_fact:
+    _need_issue: >-
+      {{
+        (certbot_force_renew | bool)
+        or ((not (certbot_skip_issue_if_present | bool)) and (not _cert_stat.stat.exists))
+        or ((certbot_skip_issue_if_present | bool) and (not _cert_stat.stat.exists))
+      }}
+
+- name: "05.6 | Resolve server args (staging/production)"
+  ansible.builtin.set_fact:
+    _server_args: "{{ '--test-cert' if certbot_mode == 'staging' else '' }}"
+
+- name: "05.7 | Resolve key args"
+  ansible.builtin.set_fact:
+    _key_args: >-
+      {{
+        ('--key-type ecdsa --elliptic-curve ' ~ certbot_ecdsa_curve) if certbot_key_type == 'ecdsa'
+        else ('--key-type rsa --rsa-key-size ' ~ (certbot_rsa_key_size | string))
+      }}
+
+- name: "05.8 | Build authenticator args (DNS google via gcloud hooks)"
+  ansible.builtin.set_fact:
+    _auth_args: >-
+      --manual
+      --preferred-challenges dns
+      --manual-auth-hook /usr/local/bin/certbot-auth-google-dns-gcloud.sh
+      --manual-cleanup-hook /usr/local/bin/certbot-cleanup-google-dns-gcloud.sh
+  when:
+    - item.method == "dns"
+    - (item.dns_provider | default("google")) == "google"
+    - (item.dns_auth_method | default(certbot_dns.google.auth_method)) == "gcloud"
+
+# --------------------------------
+# Issue certificate (HTTP-01 via webroot)
+# --------------------------------
+- name: "05.9 | Build authenticator args (HTTP webroot)"
+  ansible.builtin.set_fact:
+    _auth_args: >-
+      --webroot -w {{ item.webroot }}
+  when:
+    - item.method == "http"
+    - (item.http_auth | default("webroot")) == "webroot"
+    - item.webroot is defined
+    - item.webroot | length > 0
+
+- name: "05.10 | Prefer http challenge (optional)"
+  ansible.builtin.set_fact:
+    _auth_args: "{{ _auth_args }} --preferred-challenges http"
+  when:
+    - item.method == "http"
+    - (_auth_args | trim | length) > 0
+
+# --------------------------------
+# Issue certificate (HTTP-01 via Apache plugin)
+# --------------------------------
+- name: "05.11 | Build authenticator args (Apache plugin)"
+  ansible.builtin.set_fact:
+    _auth_args: >-
+      --apache
+      --preferred-challenges http
+  when:
+    - item.method == "apache"
+
+# --------------------------------
+# Issue certificate (HTTP-01 via standalone)
+# --------------------------------
+- name: "05.12 | Build authenticator args (standalone HTTP-01)"
+  ansible.builtin.set_fact:
+    _auth_args: >-
+      --standalone
+      --preferred-challenges http
+      --http-01-port {{ item.http_01_port | default(80) }}
+  when:
+    - item.method == "standalone"
+
+- name: "05.13 | Safety: authenticator must be set when issuing"
+  ansible.builtin.assert:
+    that:
+      - (_auth_args | trim | length) > 0
+    fail_msg: >-
+      No authenticator args were built for '{{ _cert_name }}'.
+      For method=http you must set item.webroot. For method=dns ensure dns_provider/auth_method.
+  when:
+    - _need_issue | bool
+    - certbot_issue_enabled | bool
+
+- name: "05.14 | Dry print command (visibility)"
+  ansible.builtin.debug:
+    msg: >-
+      certbot certonly --non-interactive --agree-tos
+      --email {{ certbot_email | default('MISSING_EMAIL') }}
+      --cert-name {{ _cert_name }}
+      {% for d in item.domains %}-d {{ d }} {% endfor %}
+      {{ _server_args }} {{ _key_args }} {{ _auth_args | default('') }}
+      --keep-until-expiring
+  when: _need_issue | bool
+
+- name: "05.15 | Issue certificate (standalone) - stop apache temporarily"
+  block:
+    - name: "05.15.1 | Stop apache2 (standalone needs port 80)"
+      ansible.builtin.service:
+        name: apache2
+        state: stopped
+
+    - name: "05.15.2 | Wait until port 80 is free"
+      ansible.builtin.wait_for:
+        port: "{{ item.http_01_port | default(80) }}"
+        state: stopped
+        timeout: 10
+
+    - name: "05.15.3 | Issue certificate (standalone)"
+      ansible.builtin.command: >
+        certbot certonly
+        --non-interactive --agree-tos
+        --email {{ certbot_email }}
+        --cert-name {{ _cert_name }}
+        {% for d in item.domains %}-d {{ d }} {% endfor %}
+        {{ _server_args }}
+        {{ _key_args }}
+        {{ _auth_args | default('') }}
+        --keep-until-expiring
+  always:
+    - name: "05.15.4 | Start apache2 again"
+      ansible.builtin.service:
+        name: apache2
+        state: started
+  when:
+    - _need_issue | bool
+    - certbot_issue_enabled | bool
+    - item.method == "standalone"
+
+- name: "05.16 | Issue certificate (non-standalone)"
+  ansible.builtin.command: >
+    certbot certonly
+    --non-interactive --agree-tos
+    --email {{ certbot_email }}
+    --cert-name {{ _cert_name }}
+    {% for d in item.domains %}-d {{ d }} {% endfor %}
+    {{ _server_args }}
+    {{ _key_args }}
+    {{ _auth_args | default('') }}
+    --keep-until-expiring
+  when:
+    - _need_issue | bool
+    - certbot_issue_enabled | bool
+    - item.method != "standalone"

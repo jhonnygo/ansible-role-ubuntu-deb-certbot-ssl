@@ -1,0 +1,45 @@
+---
+- name: "03.1 | http | Run only if any http cert exists"
+  ansible.builtin.set_fact:
+    _has_http: "{{ (certbot_certs | selectattr('method','equalto','http') | list | length) > 0 }}"
+
+- name: "03.2 | http | Check Apache active (needed for webroot challenge serving)"
+  ansible.builtin.command: systemctl is-active apache2
+  register: _apache_active
+  changed_when: false
+  failed_when: _apache_active.stdout.strip() != "active"
+  when: _has_http | bool
+
+- name: "03.3 | http | Ensure webroot exists for each http cert"
+  ansible.builtin.file:
+    path: "{{ item.webroot }}/.well-known/acme-challenge"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ certbot_certs | selectattr('method','equalto','http') | list }}"
+  when: _has_http | bool
+
+- name: "03.4 | http | Write smoke token file (local)"
+  ansible.builtin.copy:
+    dest: "{{ item.webroot }}/.well-known/acme-challenge/ansible-smoke"
+    content: "ok-{{ inventory_hostname }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ certbot_certs | selectattr('method','equalto','http') | list }}"
+  when: _has_http | bool
+
+- name: "03.5 | http | Curl local challenge URL (must return 200)"
+  ansible.builtin.uri:
+    url: "http://127.0.0.1/.well-known/acme-challenge/ansible-smoke"
+    return_content: true
+    status_code: 200
+  register: _local_curl
+  when: _has_http | bool
+
+- name: "03.6 | http | Cleanup smoke token file"
+  ansible.builtin.file:
+    path: "{{ item.webroot }}/.well-known/acme-challenge/ansible-smoke"
+    state: absent
+  loop: "{{ certbot_certs | selectattr('method','equalto','http') | list }}"

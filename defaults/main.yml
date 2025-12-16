@@ -1,0 +1,51 @@
+# =========================
+# Global / safety switches
+# =========================
+
+# validate: does not issue certificates (preflight / preparation only)
+# staging: issues against Let's Encrypt Staging
+# production: issues against Let's Encrypt Production
+certbot_mode: validate
+
+# By default NEVER issue (anti rate-limit safety)
+certbot_issue_enabled: false
+
+# Email is mandatory when issuing (staging/production + issue_enabled=true)
+certbot_email: "your-email@example.com"
+
+# =========================
+# Key / crypto defaults
+# =========================
+certbot_key_type: ecdsa # ecdsa|rsa
+certbot_ecdsa_curve: secp256r1
+certbot_rsa_key_size: 4096
+
+# =========================
+# Behavior
+# =========================
+certbot_force_renew: false
+certbot_skip_issue_if_present: true
+
+# =========================
+# Declarative cert list
+# =========================
+certbot_certs: []
+
+# =========================
+# DNS provider defaults (agnostic)
+# =========================
+certbot_dns:
+  google:
+    # Project where the DNS lives (Cloud DNS)
+    project: "your-gcp-project-id"
+    # Managed Zone NAME (not the DNS name). Will be filled in host_vars.
+    zone: ""
+    # gcloud: no JSON (SA attached to VM)
+    # json_plugin: using certbot-dns-google with JSON on disk
+    auth_method: "gcloud"
+    propagation_seconds: 120
+
+# =========================
+# DNS preflight (safe)
+# =========================
+certbot_dns_preflight_enabled: true

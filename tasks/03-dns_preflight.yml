@@ -1,0 +1,87 @@
+---
+- name: 03.1 | dns | Ensure at least one cert exists for DNS preflight
+  ansible.builtin.assert:
+    that:
+      - certbot_certs | length > 0
+    fail_msg: "Set certbot_certs with at least one item (used to derive the test _acme-challenge record)."
+
+- name: 03.2 | dns | Validate first cert contains domains
+  ansible.builtin.assert:
+    that:
+      - certbot_certs[0].domains is defined
+      - certbot_certs[0].domains | length > 0
+    fail_msg: "First cert in certbot_certs must include at least one domain."
+
+- name: 03.3 | dns | Validate DNS provider is google for this preflight
+  ansible.builtin.assert:
+    that:
+      - (certbot_certs[0].dns_provider | default('google')) == "google"
+    fail_msg: "DNS preflight currently expects dns_provider=google in the first cert."
+
+- name: 03.4 | dns | Resolve Google DNS project and zone (cert override > global defaults)
+  ansible.builtin.set_fact:
+    _dns_project: "{{ certbot_certs[0].dns_project | default(certbot_dns.google.project) }}"
+    _dns_zone: "{{ certbot_certs[0].dns_zone | default(certbot_dns.google.zone) }}"
+    _dns_wait: "{{ certbot_certs[0].dns_propagation_seconds | default(certbot_dns.google.propagation_seconds) }}"
+
+- name: 03.5 | dns | Validate google managed zone is set
+  ansible.builtin.assert:
+    that:
+      - (_dns_zone | length) > 0
+    fail_msg: "Set certbot_dns.google.zone or certbot_certs[0].dns_zone (managed zone NAME)."
+
+- name: 03.6 | dns | Check gcloud exists
+  ansible.builtin.command: gcloud --version
+  changed_when: false
+
+- name: 03.7 | dns | Check Cloud DNS access (list zones)
+  ansible.builtin.command: >
+    gcloud dns managed-zones list
+    --project {{ _dns_project }}
+    --format=value(name)
+    --limit=5
+  changed_when: false
+
+- name: 03.8 | dns | Build dummy TXT record (from first cert domain)
+  ansible.builtin.set_fact:
+    _domain_raw: "{{ certbot_certs[0].domains[0] }}"
+    _domain: "{{ certbot_certs[0].domains[0] | regex_replace('^\\*\\.', '') }}"
+    _record_name: "_acme-challenge.{{ (certbot_certs[0].domains[0] | regex_replace('^\\*\\.', '')) }}."
+    _record_value: "dryrun-{{ ansible_date_time.epoch }}"
+    _record_ttl: 60
+
+- name: 03.9 | dns | Add dummy TXT record (transaction)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PROJECT="{{ _dns_project }}"
+    ZONE="{{ _dns_zone }}"
+    NAME="{{ _record_name }}"
+    VAL="{{ _record_value }}"
+    TTL="{{ _record_ttl }}"
+
+    gcloud dns record-sets transaction start --zone "$ZONE" --project "$PROJECT" >/dev/null
+    gcloud dns record-sets transaction add "$VAL" --name "$NAME" --ttl "$TTL" --type TXT --zone "$ZONE" --project "$PROJECT"
+    gcloud dns record-sets transaction execute --zone "$ZONE" --project "$PROJECT"
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: 03.10 | dns | Wait for propagation (best-effort)
+  ansible.builtin.pause:
+    seconds: "{{ _dns_wait | int }}"
+
+- name: 03.11 | dns | Remove dummy TXT record (transaction)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    PROJECT="{{ _dns_project }}"
+    ZONE="{{ _dns_zone }}"
+    NAME="{{ _record_name }}"
+    VAL="{{ _record_value }}"
+    TTL="{{ _record_ttl }}"
+
+    gcloud dns record-sets transaction start --zone "$ZONE" --project "$PROJECT" >/dev/null
+    gcloud dns record-sets transaction remove "$VAL" --name "$NAME" --ttl "$TTL" --type TXT --zone "$ZONE" --project "$PROJECT"
+    gcloud dns record-sets transaction execute --zone "$ZONE" --project "$PROJECT"
+  args:
+    executable: /bin/bash
+  changed_when: true

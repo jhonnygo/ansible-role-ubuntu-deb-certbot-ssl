@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT-0
+galaxy_info:
+  role_name: ubuntu_deb_certbot_ssl
+  namespace: jhonnygo
+
+  author: Jhonny Gomez (JhonnyGO) - <soporte@jhoncytech.com>
+  description: >
+    Installs and configures Certbot on Ubuntu/Debian to validate, issue, and renew
+    Let's Encrypt SSL certificates with safe defaults, supporting DNS-01 providers
+    (Route 53, Cloudflare, Google Cloud DNS) and preflight checks to avoid rate limits.
+  company: Jhoncy Tech
+
+  license: MIT-0
+
+  min_ansible_version: "2.14"
+
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - bullseye
+    - name: Ubuntu
+      versions:
+        - jammy
+        - focal
+
+  galaxy_tags:
+    - certbot
+    - letsencrypt
+    - ssl
+    - tls
+    - https
+    - debian
+    - ubuntu
+    - nginx
+    - apache
+    - dns
+    - gcp
+    - automation
+    - security
+
+dependencies: []

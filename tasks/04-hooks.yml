@@ -1,0 +1,34 @@
+---
+- name: "04.1 | Resolve DNS defaults (from first cert) for hook rendering"
+  ansible.builtin.set_fact:
+    _dns_project: "{{ certbot_certs[0].dns_project | default(certbot_dns.google.project) }}"
+    _dns_zone: "{{ certbot_certs[0].dns_zone | default(certbot_dns.google.zone) }}"
+    _dns_wait: "{{ certbot_certs[0].dns_propagation_seconds | default(certbot_dns.google.propagation_seconds) }}"
+  when:
+    - certbot_certs | length > 0
+    - (certbot_certs[0].dns_provider | default('google')) == "google"
+    - (certbot_certs[0].dns_auth_method | default(certbot_dns.google.auth_method)) == "gcloud"
+
+- name: "04.2 | Render Google DNS auth hook (gcloud)"
+  ansible.builtin.template:
+    src: hooks/google-auth-gcloud.sh.j2
+    dest: /usr/local/bin/certbot-auth-google-dns-gcloud.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - certbot_certs | length > 0
+    - (certbot_certs[0].dns_provider | default('google')) == "google"
+    - (certbot_certs[0].dns_auth_method | default(certbot_dns.google.auth_method)) == "gcloud"
+
+- name: "04.3 | Render Google DNS cleanup hook (gcloud)"
+  ansible.builtin.template:
+    src: hooks/google-cleanup-gcloud.sh.j2
+    dest: /usr/local/bin/certbot-cleanup-google-dns-gcloud.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - certbot_certs | length > 0
+    - (certbot_certs[0].dns_provider | default('google')) == "google"
+    - (certbot_certs[0].dns_auth_method | default(certbot_dns.google.auth_method)) == "gcloud"

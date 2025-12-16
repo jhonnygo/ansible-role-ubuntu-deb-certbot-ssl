@@ -1,0 +1,47 @@
+---
+# --------------------------------------------------------------
+# Apache checks is installed and running if method=apache is used.
+# --------------------------------------------------------------
+- name: "03.1 | apache | Apache must be installed (apache method)"
+  ansible.builtin.command: "apache2ctl -v"
+  register: _apache_v
+  changed_when: false
+  when: item.method == "apache"
+
+- name: "03.2 | apache | Apache config must be valid (apache method)"
+  ansible.builtin.command: "apache2ctl -t"
+  register: _apache_t
+  changed_when: false
+  when: item.method == "apache"
+
+- name: "03.3 | apache | Apache service must be running (apache method)"
+  ansible.builtin.service_facts:
+  when: item.method == "apache"
+
+- name: "03.4 | apache | Assert apache2 is active"
+  ansible.builtin.assert:
+    that:
+      - "'apache2' in ansible_facts.services"
+      - "ansible_facts.services['apache2'].state == 'running'"
+    fail_msg: "apache2 must be running for method=apache."
+  when: item.method == "apache"
+
+# --------------------------------------------------------------
+# Apache vhost checks for ServerName
+# --------------------------------------------------------------
+- name: "03.5 | apache | Ensure vhost ServerName exists for domain (apache method)"
+  ansible.builtin.shell: |
+    set -euo pipefail
+    grep -R --line-number --fixed-strings "ServerName {{ item.domains[0] }}" /etc/apache2/sites-enabled || true
+  register: _vhost_match
+  changed_when: false
+  when: item.method == "apache"
+
+- name: "03.6 | apache | Assert vhost ServerName is present"
+  ansible.builtin.assert:
+    that:
+      - (_vhost_match.stdout | trim | length) > 0
+    fail_msg: >-
+      No enabled Apache vhost found with ServerName {{ item.domains[0] }}.
+      Create/enable a vhost in /etc/apache2/sites-available and a2ensite it.
+  when: item.method == "apache"

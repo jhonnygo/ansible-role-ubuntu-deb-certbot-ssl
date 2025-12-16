@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT="{{ _dns_project }}"
+ZONE="{{ _dns_zone }}"
+TTL=60
+
+DOMAIN="${CERTBOT_DOMAIN}"
+VALIDATION="${CERTBOT_VALIDATION}"
+
+# Wildcard: "*.example.com" -> "example.com"
+if [[ "${DOMAIN}" == \*.* ]]; then
+  DOMAIN="${DOMAIN:2}"
+fi
+
+RECORD="_acme-challenge.${DOMAIN}."
+
+gcloud dns record-sets transaction start --zone "${ZONE}" --project "${PROJECT}" >/dev/null
+gcloud dns record-sets transaction add "${VALIDATION}" \
+  --name "${RECORD}" --ttl "${TTL}" --type "TXT" \
+  --zone "${ZONE}" --project "${PROJECT}"
+gcloud dns record-sets transaction execute --zone "${ZONE}" --project "${PROJECT}"
+
+sleep "{{ _dns_wait | int }}"

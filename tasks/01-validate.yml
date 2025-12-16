@@ -1,0 +1,41 @@
+- name: "01.1 | Validate certbot_mode"
+  ansible.builtin.assert:
+    that:
+      - certbot_mode in ["validate", "staging", "production"]
+    fail_msg: "certbot_mode must be one of: validate, staging, production"
+
+- name: "01.2 | Validate OS family (Debian/Ubuntu)"
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "Debian"
+    fail_msg: "Role supports Debian/Ubuntu only. Detected: {{ ansible_facts.os_family }}"
+
+- name: "01.3 | Validate certbot_certs is a list"
+  ansible.builtin.assert:
+    that:
+      - certbot_certs is sequence
+      - certbot_certs is not string
+    fail_msg: "certbot_certs must be a list"
+
+- name: "01.4 | Safety: validate mode must not issue"
+  ansible.builtin.assert:
+    that:
+      - certbot_mode != "validate"
+    fail_msg: "certbot_mode is 'validate' so certbot_issue_enabled must be false."
+  when: certbot_issue_enabled | bool
+
+- name: "01.5 | Safety: production issuance requires explicit allow"
+  ansible.builtin.assert:
+    that:
+      - certbot_allow_production | bool
+    fail_msg: "Production issuance blocked. Set certbot_allow_production: true to allow production."
+  when:
+    - certbot_issue_enabled | bool
+    - certbot_mode == "production"
+
+- name: "01.6 | Validate certbot_email when issuance is enabled"
+  ansible.builtin.assert:
+    that:
+      - (certbot_email | default('') | length) > 0
+    fail_msg: "certbot_email is required when certbot_issue_enabled=true"
+  when: certbot_issue_enabled | bool

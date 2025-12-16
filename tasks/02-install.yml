@@ -1,0 +1,25 @@
+---
+- name: 02.1 | Install base packages (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: 02.2 | Install certbot (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name:
+      - certbot
+    state: present
+
+- name: 02.3 | Install certbot apache plugin
+  ansible.builtin.apt:
+    name:
+      - certbot
+      - python3-certbot-apache
+    state: present
+    update_cache: true
