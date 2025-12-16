@@ -63,6 +63,60 @@ This role is designed to be **defensive by default**:
 
 ---
 
+## Repository layout
+
+Below is the **project layout** used in the DevOps monorepo. It shows where inventories, playbooks and this role live, so the command examples make sense.
+
+```
+config-mgmt/ansible
+.
+├── ansible.cfg
+├── .ansible
+│   ├── collections/
+│   │   └── ansible_collections/
+│   └── roles/
+│       └── jhonnygo.ubuntu_deb_certbot_ssl/
+│           ├── CHANGELOG
+│           ├── LICENSE
+│           ├── README.md
+│           ├── defaults/...
+│           ├── img/...
+│           ├── meta/...
+│           ├── tasks/
+│           │   ├── 01-validate.yml
+│           │   ├── 02-install.yml
+│           │   ├── 03-apache_preflight.yml
+│           │   ├── 03-dns_preflight.yml
+│           │   ├── 03-http_preflight.yml
+│           │   ├── 04-hooks.yml
+│           │   ├── 05-issue.yml
+│           │   ├── issue_one.yml
+│           │   └── main.yml
+│           └── templates/...
+│
+├── inventories/
+│   └── gcp/
+│       ├── dev/
+│       │   ├── gcp_compute.yml
+│       │   ├── group_vars/
+│       │   │   ├── all.yml
+│       │   │   └── component_app.yml
+│       │   └── host_vars/
+│       │       └── vm-dev-01.yml
+|       ├── stage/...
+|       |
+│       └── prod/...
+│
+├── playbooks/
+│   ├── certbot-ssl.yml
+│   └── ping.yml
+└── requirements/
+    ├── collections.yml
+    └── roles.yml
+```
+
+---
+
 ## Installation
 
 ### Option A: Install from Ansible Galaxy
@@ -123,7 +177,7 @@ A minimal playbook that targets the group `component_app` and runs the role:
   serial: 1
 
   roles:
-    - role: ubuntu_deb_certbot_ssl
+    - role: jhonnygo.ubuntu_deb_certbot_ssl
 ```
 
 ---
